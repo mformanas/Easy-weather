@@ -1,11 +1,4 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
-</head>
-<body>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}body{margin:0}[hidden]{display:none!important}</style></head><body>
 <title>California Weather Map</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -140,6 +133,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .pick-vals .r{color:var(--rain)}
 #spark{width:100%;height:auto;display:block}
 .hint{font-size:12.5px;color:var(--muted);margin:0}
+.hint a{color:inherit}
 .ranks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 .ranks li{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line)}
 .ranks li:first-child{border-top:0;padding-top:0}
@@ -202,6 +196,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
           <div><dt id="pickPL">Rain</dt><dd class="r" id="pickR">--%</dd></div>
         </dl>
         <svg id="spark" viewBox="0 0 284 92" aria-hidden="true"></svg>
+        <p class="hint" id="pickWind" hidden></p>
         <p class="hint" id="pickRange"></p>
       </div>
       <div class="card box">
@@ -209,7 +204,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
         <ul class="ranks" id="ranks"></ul>
       </div>
       <div class="kbd"><kbd>Space</kbd> play · <kbd>←</kbd><kbd>→</kbd> step an hour · scroll or pinch to zoom · drag to pan · tap a city to select it</div>
-      <p class="hint"><span id="rangeTxt"></span> Hourly values are estimated from each city's daily forecast; colors between cities are blended by distance.</p>
+      <p class="hint"><span id="rangeTxt"></span> <span id="srcNote"></span></p>
     </aside>
   </div>
 </div>
@@ -223,25 +218,42 @@ const DATA = {"fetchedAt":"2026-11-12T17:05:00-08:00","firstDate":"2026-11-12","
   "use strict";
   const N=48, SUNRISE=6+53/60, SUNSET=16+57/60, TZ="America/Los_Angeles";
   const TIER2=new Set(["Oakland","Half Moon Bay","Napa","Walnut Creek","San Rafael","Livermore","Palo Alto"]);
-  // Start the timeline at the hour the forecast was fetched (Pacific time)
-  const fetched=new Date(DATA.fetchedAt), startMs=Math.floor(fetched.getTime()/3600000)*3600000;
-  const pacHour=+new Intl.DateTimeFormat("en-US",{timeZone:TZ,hour:"numeric",hourCycle:"h23"}).format(fetched);
-  const START=pacHour;
-  const d0=new Date(DATA.firstDate+"T12:00:00Z");
-  const DAYS=[0,1,2,3].map(i=>new Date(d0.getTime()+i*864e5).toLocaleDateString("en-US",{weekday:"short",timeZone:"UTC"}));
-  const DATES=[0,1,2,3].map(i=>new Date(d0.getTime()+i*864e5).toLocaleDateString("en-US",{month:"short",day:"numeric",timeZone:"UTC"}));
+  const LL={"San Francisco":[37.7749,-122.4194],"Oakland":[37.8044,-122.2712],"San Jose":[37.3382,-121.8863],"Half Moon Bay":[37.4636,-122.4286],"Napa":[38.2975,-122.2869],"Walnut Creek":[37.9101,-122.0652],"San Rafael":[37.9735,-122.5311],"Livermore":[37.6819,-121.768],"Palo Alto":[37.4419,-122.143],"Sacramento":[38.5816,-121.4944],"Redding":[40.5865,-122.3917],"Eureka":[40.8021,-124.1637],"Fresno":[36.7378,-119.7871],"Bakersfield":[35.3733,-119.0187],"Los Angeles":[34.0522,-118.2437],"San Diego":[32.7157,-117.1611],"Santa Barbara":[34.4208,-119.6982],"Palm Springs":[33.8303,-116.5453],"South Lake Tahoe":[38.9399,-119.9772],"Monterey":[36.6002,-121.8947],"Bishop":[37.3635,-118.3951],"Barstow":[34.8958,-117.0173],"San Luis Obispo":[35.2828,-120.6596],"Crescent City":[41.7558,-124.2026],"Alturas":[41.4871,-120.5424],"El Centro":[32.792,-115.5631],"Merced":[37.3022,-120.483]};
+  const SNOWC=new Set([71,73,75,77,85,86]);
   const cosI=(a,t)=>{for(let i=0;i<a.length-1;i++){const[t0,v0]=a[i],[t1,v1]=a[i+1];if(t>=t0&&t<=t1){const f=(t-t0)/(t1-t0);return v0+(v1-v0)*(1-Math.cos(Math.PI*f))/2}}return a[a.length-1][1]};
   const linI=(a,t)=>{for(let i=0;i<a.length-1;i++){const[t0,v0]=a[i],[t1,v1]=a[i+1];if(t>=t0&&t<=t1)return v0+(v1-v0)*(t-t0)/(t1-t0)}return a[a.length-1][1]};
-  const names=Object.keys(DATA.cities).filter(n=>GEO.cities[n]), S={};
-  names.forEach(n=>{const c=DATA.cities[n],END=START+N+2;
-    // daily lows near 6 AM and highs near 3 PM; rain chance centered on midday
-    const tA=[[START,c.now]],rA=[[START,c.d[0][2]]];
-    c.d.forEach((d,i)=>{[[24*i+6,d[1]],[24*i+15,d[0]]].forEach(a=>{if(a[0]>START+1)tA.push(a)});if(24*i+12>START+2)rA.push([24*i+12,d[2]])});
-    tA.push([END,tA[tA.length-1][1]]);rA.push([END,rA[rA.length-1][1]]);
-    const s={temp:[],rain:[],snow:[],tier:TIER2.has(n)?2:1,x:GEO.cities[n][0],y:GEO.cities[n][1]};
-    for(let h=0;h<N;h++){const t=START+h,day=c.d[Math.min(c.d.length-1,Math.floor(t/24))];
-      s.temp.push(cosI(tA,t));s.rain.push(Math.round(linI(rA,t)/5)*5);s.snow.push(day[3]==="s")}
-    S[n]=s});
+  const names=Object.keys(DATA.cities).filter(n=>GEO.cities[n]&&LL[n]), S={};
+  // Where the hours on screen came from: "live" (just fetched), "cached" (last fetch saved on this device) or "snapshot" (built into the page)
+  let START=0, DAYS=[], DATES=[], SRC={mode:"snapshot",at:new Date(DATA.fetchedAt),startMs:0,loading:true};
+  function pacParts(d){const p=new Intl.DateTimeFormat("en-CA",{timeZone:TZ,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",hourCycle:"h23"}).formatToParts(d);
+    const g=t=>p.find(x=>x.type===t).value;return{date:`${g("year")}-${g("month")}-${g("day")}`,hour:+g("hour")%24}}
+  function setDays(firstDate){const d0=new Date(firstDate+"T12:00:00Z");
+    DAYS=[0,1,2,3].map(i=>new Date(d0.getTime()+i*864e5).toLocaleDateString("en-US",{weekday:"short",timeZone:"UTC"}));
+    DATES=[0,1,2,3].map(i=>new Date(d0.getTime()+i*864e5).toLocaleDateString("en-US",{month:"short",day:"numeric",timeZone:"UTC"}))}
+  const baseCity=n=>({tier:TIER2.has(n)?2:1,x:GEO.cities[n][0],y:GEO.cities[n][1]});
+  function clearDerived(){for(const k in S)if(!names.includes(k))delete S[k]}
+  // Snapshot: hours estimated from the saved daily forecast (lows near 6 AM, highs near 3 PM, rain chance centered on midday)
+  function buildFromDaily(){const f=new Date(DATA.fetchedAt);START=pacParts(f).hour;setDays(DATA.firstDate);
+    names.forEach(n=>{const c=DATA.cities[n],END=START+N+2;
+      const tA=[[START,c.now]],rA=[[START,c.d[0][2]]];
+      c.d.forEach((d,i)=>{[[24*i+6,d[1]],[24*i+15,d[0]]].forEach(a=>{if(a[0]>START+1)tA.push(a)});if(24*i+12>START+2)rA.push([24*i+12,d[2]])});
+      tA.push([END,tA[tA.length-1][1]]);rA.push([END,rA[rA.length-1][1]]);
+      const s=Object.assign(baseCity(n),{temp:[],rain:[],snow:[],ws:null,wd:null});
+      for(let h=0;h<N;h++){const t=START+h,day=c.d[Math.min(c.d.length-1,Math.floor(t/24))];
+        s.temp.push(cosI(tA,t));s.rain.push(Math.round(linI(rA,t)/5)*5);s.snow.push(day[3]==="s")}
+      S[n]=s});
+    SRC.startMs=Math.floor(f.getTime()/3600000)*3600000}
+  // Live or cached: the real hourly forecast from Open-Meteo, starting at the current hour
+  function buildFromHourly(list){const now=new Date(),pp=pacParts(now),key=`${pp.date}T${String(pp.hour).padStart(2,"0")}:00`;
+    if(!Array.isArray(list)||list.length!==names.length)return false;
+    const i0s=list.map(x=>x&&x.hourly&&x.hourly.time?x.hourly.time.indexOf(key):-1);
+    if(i0s.some((i,ci)=>i<0||list[ci].hourly.time.length-i<N))return false;
+    names.forEach((n,ci)=>{const h=list[ci].hourly,i0=i0s[ci],sl=a=>(a||[]).slice(i0,i0+N);
+      const code=sl(h.weather_code),snowf=sl(h.snowfall),tp=sl(h.temperature_2m),pr=sl(h.precipitation_probability);
+      S[n]=Object.assign(baseCity(n),{temp:tp.map((v,j)=>v??tp[j-1]??0),rain:pr.map(v=>Math.round((v??0)/5)*5),
+        snow:code.map((c,j)=>SNOWC.has(c)||(snowf[j]||0)>0),ws:sl(h.wind_speed_10m),wd:sl(h.wind_direction_10m)})});
+    START=pp.hour;setDays(pp.date);SRC.startMs=Math.floor(now.getTime()/3600000)*3600000;return true}
+  buildFromDaily();
   const hourInfo=h=>{const t=START+h,hr=t%24,di=Math.floor(t/24);return{day:DAYS[di],date:DATES[di],hr,isDay:hr+.5>SUNRISE&&hr+.5<SUNSET}};
   const fmtHr=hr=>(hr%12||12)+" "+(hr<12?"AM":"PM");
   const fmtShort=hr=>hr===0?"12a":hr===12?"12p":(hr%12)+(hr<12?"a":"p");
@@ -415,6 +427,7 @@ const DATA = {"fetchedAt":"2026-11-12T17:05:00-08:00","firstDate":"2026-11-12","
   // ---------- render loop ----------
   let pending=false;
   function schedule(){if(pending)return;pending=true;requestAnimationFrame(()=>{pending=false;world.setAttribute("transform",`translate(${view.tx} ${view.ty}) scale(${view.k})`);drawField();drawLabels()})}
+  const compass=d=>["north","northeast","east","southeast","south","southwest","west","northwest"][Math.round(((d%360)+360)%360/45)%8];
   function renderAll(){schedule();const hi=hourInfo(idx);
     $("clockDay").textContent=hi.day+" · "+(hi.isDay?"day":"night");$("clockHr").textContent=fmtHr(hi.hr);
     $("scrub").value=idx;$("scrub").setAttribute("aria-valuetext",hi.day+" "+fmtHr(hi.hr));
@@ -422,6 +435,7 @@ const DATA = {"fetchedAt":"2026-11-12T17:05:00-08:00","firstDate":"2026-11-12","
     $("pickSub").textContent=s.est?s.note:"Forecast city";
     selCounty.setAttribute("d",s.county?s.county[1]:"");$("pickT").textContent=Math.round(s.temp[idx])+"°";
     $("pickPL").textContent=s.snow[idx]?"Snow":"Rain";$("pickR").textContent=s.rain[idx]+"%";
+    const pw=$("pickWind");if(s.ws&&s.ws[idx]!=null){pw.hidden=false;pw.textContent=`Wind ${Math.round(s.ws[idx])} mph from the ${compass(s.wd[idx])}`}else pw.hidden=true;
     drawStrip();drawSpark();drawRanks()}
 
   // ---------- playback ----------
@@ -527,17 +541,43 @@ const DATA = {"fetchedAt":"2026-11-12T17:05:00-08:00","firstDate":"2026-11-12","
     else if(e.key==="Escape"){qClose()}});
 
   new ResizeObserver(()=>{resize();drawStrip()}).observe(box);
-  (function(){const nowIdx=Math.floor((Date.now()-startMs)/3600000);
-    const ageH=(Date.now()-fetched.getTime())/3600000;
-    const f=new Intl.DateTimeFormat("en-US",{timeZone:TZ,weekday:"short",hour:"numeric",minute:"2-digit"}).format(fetched);
-    const last=hourInfo(N-1),first=hourInfo(0);
+  // ---------- live data ----------
+  const API="https://api.open-meteo.com/v1/forecast?latitude="+names.map(n=>LL[n][0]).join(",")+"&longitude="+names.map(n=>LL[n][1]).join(",")+
+    "&hourly=temperature_2m,precipitation_probability,weather_code,snowfall,wind_speed_10m,wind_direction_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FLos_Angeles&forecast_days=4";
+  const CK="easy-weather-cache-v1";
+  const fmtWhen=d=>new Intl.DateTimeFormat("en-US",{timeZone:TZ,weekday:"short",hour:"numeric",minute:"2-digit"}).format(d);
+  function updateSourceUI(){const fr=$("fresh"),ft=$("freshTxt"),w=fmtWhen(SRC.at),first=hourInfo(0),last=hourInfo(N-1);
+    fr.classList.toggle("old",SRC.mode!=="live");
+    if(SRC.mode==="live")ft.textContent=`Live forecast · updated ${w}`;
+    else if(SRC.loading)ft.textContent="Loading the live forecast…";
+    else if(SRC.mode==="cached")ft.textContent=`Offline · showing the forecast saved ${w}`;
+    else{const past=Date.now()-SRC.startMs>=N*3600000;ft.textContent=past?`Couldn't reach the weather service. Showing an old forecast from ${w}.`:`Couldn't reach the weather service. Showing the forecast saved ${w}.`}
     $("rangeTxt").textContent=`Covers ${first.day} ${first.date}, ${fmtHr(first.hr)} to ${last.day} ${last.date}, ${fmtHr(last.hr)} (Pacific).`;
-    if(nowIdx>=N){$("fresh").classList.add("old");$("freshTxt").textContent=`Showing the last saved forecast, from ${f}. A newer one hasn't been published yet.`}
-    else{if(ageH>6)$("fresh").classList.add("old");$("freshTxt").textContent=`Forecast updated ${f}`;if(nowIdx>0)idx=nowIdx}})();
+    $("srcNote").innerHTML=SRC.mode==="snapshot"?"Hourly values are estimated from each city's daily forecast; colors between cities are blended by distance.":
+      'Hourly forecast from <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> for 27 cities; other places and the colors between cities are blended by distance.'}
+  function reestimatePicked(){if(S[picked])return;const e=ENTRIES.find(x=>x.key===picked);if(!e){picked="San Francisco";return}e.county?countySeries(e):estimate(e)}
+  function apply(list,at,mode){const oldStart=SRC.startMs;if(!buildFromHourly(list))return false;
+    clearDerived();SRC.mode=mode;SRC.at=at;
+    idx=oldStart?Math.max(0,Math.min(N-1,idx-Math.round((SRC.startMs-oldStart)/3600000))):0;
+    reestimatePicked();updateSourceUI();renderAll();if(!ql.hidden)qRender();return true}
+  async function loadLive(){SRC.loading=true;
+    try{const r=await fetch(API,{cache:"no-store"});if(!r.ok)throw new Error(r.status);const j=await r.json();const list=Array.isArray(j)?j:[j];const at=new Date();
+      if(apply(list,at,"live")){try{localStorage.setItem(CK,JSON.stringify({at:at.toISOString(),list:list.map(x=>({hourly:x.hourly}))}))}catch(e){}}}
+    catch(e){}
+    SRC.loading=false;updateSourceUI()}
+  // 1) the saved snapshot is already built; jump to the current hour inside it
+  {const nowIdx=Math.floor((Date.now()-SRC.startMs)/3600000);if(nowIdx>0&&nowIdx<N)idx=nowIdx}
+  // 2) a newer forecast saved on this device from an earlier visit
+  try{const c=JSON.parse(localStorage.getItem(CK)||"null");if(c&&new Date(c.at)>SRC.at){const keep=idx;SRC.startMs=0;if(!apply(c.list,new Date(c.at),"cached")){buildFromDaily();idx=keep}}}catch(e){}
+  updateSourceUI();
+  // 3) the live forecast, now and every 30 minutes while the page is open
+  loadLive();
+  let lastTry=Date.now();
+  setInterval(()=>{if(!document.hidden){lastTry=Date.now();loadLive()}},30*60*1000);
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden&&Date.now()-lastTry>10*60*1000){lastTry=Date.now();loadLive()}});
   const mq=matchMedia("(max-width:700px)"),ph=()=>{q.placeholder=mq.matches?"City or county":"Search a city or county"};ph();mq.addEventListener("change",ph);
   legend();renderAll();
 })();
 </script>
 
-</body>
-</html>
+</body></html>
